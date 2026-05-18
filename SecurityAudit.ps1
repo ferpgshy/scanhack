@@ -6,6 +6,10 @@
     Execute como Administrador no PowerShell 5.1+
 #>
 
+# Forçar UTF-8 no console para PS 5.1 (evita garbled emojis / box-drawing)
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding            = [System.Text.Encoding]::UTF8
+
 # Set-StrictMode removido: conflita com $ErrorActionPreference=SilentlyContinue
 # causando falha no here-string do $HTML quando colecoes retornam objeto unico
 $ErrorActionPreference = 'SilentlyContinue'
