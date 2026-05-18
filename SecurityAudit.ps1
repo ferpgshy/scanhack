@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     SecurityAudit.ps1 v3.0 — Relatório de comprometimento com baixo índice de falsos positivos
