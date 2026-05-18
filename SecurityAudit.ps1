@@ -608,6 +608,17 @@ Write-Section "Credenciais e senhas" 6 9
 
 $SavedCreds = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+# Helper: extrai URL/nome legível do recurso
+function Format-CredUrl ([string]$raw) {
+    if ($raw -match 'https?://([^/?#:]+)')  { return $Matches[1] }
+    if ($raw -match 'ftp://([^/?#:]+)')     { return $Matches[1] }
+    if ($raw -match '^(?:LegacyGeneric:target=|TERMSRV/|WindowsLive:name=|Domain:target=)(.+)') { return $Matches[1] }
+    if ($raw -match '^MicrosoftOffice')     { return 'Microsoft Office' }
+    if ($raw -match '^Adobe')               { return 'Adobe' }
+    if ($raw.Length -gt 60)                { return ($raw -split '[/\\]' | Where-Object { $_ } | Select-Object -Last 1) }
+    return $raw
+}
+
 # 1. Windows Credential Manager (cmdkey /list)
 try {
     $cmdout = cmdkey /list 2>&1
@@ -622,36 +633,41 @@ try {
             $user = ($ln -split ':\s*', 2)[-1].Trim()
             if ($target -and $user -and $target -notmatch '^\*') {
                 $SavedCreds.Add([PSCustomObject]@{
-                    Fonte   = 'Credential Manager'
-                    Recurso = $target
-                    Login   = $user
-                    Senha   = '●●●●●●●●'
-                    Detalhe = $type
+                    Fonte     = 'Windows'
+                    UrlClean  = Format-CredUrl $target
+                    Login     = $user
+                    Senha     = '●●●●●●●●'
+                    Indicador = '💾 Armazenada pelo Windows'
                 })
             }
         }
     }
 } catch {}
 
-# 2. Windows Vault (PasswordVault — retorna senhas em texto para mascarar)
+# 2. Windows Vault (PasswordVault — retorna a senha real para mostrar parcialmente)
 try {
     [Windows.Security.Credentials.PasswordVault, Windows.Security.Credentials, ContentType = WindowsRuntime] | Out-Null
     $vault = [Windows.Security.Credentials.PasswordVault]::new()
     foreach ($c in @($vault.RetrieveAll())) {
         try { $c.RetrievePassword() } catch {}
         $pwd = $c.Password
-        $masked = if ($pwd -and $pwd.Length -ge 2) {
-            $pwd[0] + ('●' * [Math]::Min(8, $pwd.Length - 2)) + $pwd[$pwd.Length - 1]
-        } elseif ($pwd) { '●●●' } else { '[vazia]' }
-        $detail = if ($pwd -and $pwd.Length -lt 8) { '⚠ Curta' } else { '' }
+        # Mostrar primeiras 3 letras + *** (ex: "fer***")
+        $masked = if ($pwd -and $pwd.Length -gt 3) {
+            $pwd.Substring(0, [Math]::Min(3, $pwd.Length - 1)) + '***'
+        } elseif ($pwd -and $pwd.Length -gt 0) { '***' } else { '[vazia]' }
+        $isWeak  = $pwd -and $pwd.Length -lt 8
+        $isDigit = $pwd -and ($pwd -match '^[0-9]+$')
+        $ind = if ($isWeak -and $isDigit) { "⚠ FRACA — somente números ($($pwd.Length) dígitos)" }
+               elseif ($isWeak)           { "⚠ FRACA — senha com $($pwd.Length) caractere(s)" }
+               else                       { '💾 Salva no Windows Vault' }
         $SavedCreds.Add([PSCustomObject]@{
-            Fonte   = 'Windows Vault'
-            Recurso = $c.Resource
-            Login   = $c.UserName
-            Senha   = $masked
-            Detalhe = $detail
+            Fonte     = 'Windows Vault'
+            UrlClean  = Format-CredUrl $c.Resource
+            Login     = $c.UserName
+            Senha     = $masked
+            Indicador = $ind
         })
-        if ($pwd -and $pwd.Length -lt 8) { Add-Finding 'Credencial' "Senha fraca no Vault: recurso '$($c.Resource)' ($($pwd.Length) chars)" 'MÉDIO' }
+        if ($isWeak) { Add-Finding 'Credencial' "Senha fraca no Vault: '$($c.Resource)' ($($pwd.Length) chars)" 'MÉDIO' }
     }
 } catch {}
 
@@ -664,11 +680,11 @@ foreach ($b in @(
     if (Test-Path $b.Path) {
         $sz = [math]::Round((Get-Item $b.Path).Length / 1KB, 1)
         $SavedCreds.Add([PSCustomObject]@{
-            Fonte   = $b.Nome
-            Recurso = $b.Path
-            Login   = "(banco de dados — ${sz} KB)"
-            Senha   = '[DPAPI criptografado]'
-            Detalhe = 'DB no disco'
+            Fonte     = $b.Nome
+            UrlClean  = "$($b.Nome) (browser)"
+            Login     = "Senhas salvas no $($b.Nome) detectadas em disco"
+            Senha     = '[criptografado]'
+            Indicador = "🌐 Banco de senhas do $($b.Nome) — ${sz} KB no disco"
         })
         Add-Finding 'Credencial' "Banco de senhas do $($b.Nome) detectado em disco (${sz} KB)" 'BAIXO'
     }
@@ -878,20 +894,21 @@ $FindingsHTML = if ($Script:Findings.Count -eq 0) {
     }) -join ''
 }
 
-# Gera HTML estilo card para credenciais (estilo Apple Passwords)
+# Gera HTML estilo Apple Passwords — URL, Login, Senha parcial, Indicador
 $CredentialsHTML = if (@($SavedCreds).Count -eq 0) {
     "<div class='empty'>&#10003; Nenhuma credencial ou banco de senhas detectado</div>"
 } else {
-    ($SavedCreds | ForEach-Object {
-        $badge = if ($_.Detalhe -match '⚠|Curta') { "<span class='cred-badge weak'>SENHA CURTA</span>" }
-                 elseif ($_.Detalhe -match 'DB|cript|detecta') { "<span class='cred-badge db'>DB DETECTADO</span>" }
-                 else { '' }
-        "<div class='cred-card'>" +
-        "<span class='cred-source'>$($_.Fonte)</span>" +
-        "<div class='cred-info'><div class='cred-url'>$([System.Web.HttpUtility]::HtmlEncode($_.Recurso))</div><div class='cred-login'>$([System.Web.HttpUtility]::HtmlEncode($_.Login))</div></div>" +
-        "<div style='text-align:right'><div class='cred-pw'>$($_.Senha)</div>$badge</div>" +
+    "<div class='cred-grid'>" + ($SavedCreds | ForEach-Object {
+        $indCls = if ($_.Indicador -match '⚠')  { 'cr-ind-warn' }
+                  elseif ($_.Indicador -match '🌐') { 'cr-ind-info' }
+                  else { '' }
+        "<div class='cred-row'>" +
+        "<div class='cr-f'><span class='cr-l'>&#127760; URL / Servi&ccedil;o</span><span class='cr-v cr-url'>$([System.Web.HttpUtility]::HtmlEncode($_.UrlClean))</span></div>" +
+        "<div class='cr-f'><span class='cr-l'>&#128100; Login</span><span class='cr-v'>$([System.Web.HttpUtility]::HtmlEncode($_.Login))</span></div>" +
+        "<div class='cr-f'><span class='cr-l'>&#128273; Senha</span><span class='cr-v cr-pw'>$($_.Senha)</span></div>" +
+        "<div class='cr-f'><span class='cr-l'>&#8505; Indicador</span><span class='cr-v $indCls'>$($_.Indicador)</span></div>" +
         "</div>"
-    }) -join ''
+    }) -join '' + "</div>"
 }
 
 # Seções do relatório
@@ -988,16 +1005,17 @@ tr:hover td{background:rgba(0,212,255,.03);color:var(--tx)}
 tr.suspect td{background:rgba(255,68,68,.04)}
 tr.suspect:hover td{background:rgba(255,68,68,.08);color:var(--tx)}
 .empty{color:var(--g);font-size:12px;display:flex;align-items:center;gap:8px;padding:6px 0}
-.cred-card{background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:12px 16px;margin-bottom:6px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;transition:border-color .2s}
-.cred-card:hover{border-color:rgba(0,212,255,.25)}
-.cred-source{font-size:9px;font-weight:700;letter-spacing:1px;color:var(--mut);text-transform:uppercase;padding:2px 8px;background:rgba(0,0,0,.4);border-radius:3px;border:1px solid var(--bd);white-space:nowrap}
-.cred-info{min-width:0}
-.cred-url{font-size:12px;font-weight:500;color:var(--p);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cred-login{font-size:11px;color:var(--tx2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cred-pw{font-size:13px;font-family:'Cascadia Code',Consolas,monospace;color:var(--mut);letter-spacing:3px;text-align:right}
-.cred-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;display:inline-block;margin-top:3px;white-space:nowrap}
-.cred-badge.weak{background:rgba(255,170,0,.15);border:1px solid rgba(255,170,0,.3);color:var(--a)}
-.cred-badge.db{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:#60a5fa}
+.cred-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:8px}
+.cred-row{background:var(--sf2);border:1px solid var(--bd);border-radius:10px;padding:14px 18px;display:flex;flex-direction:column;transition:border-color .2s}
+.cred-row:hover{border-color:rgba(0,212,255,.25)}
+.cr-f{display:grid;grid-template-columns:130px 1fr;align-items:baseline;padding:6px 0;border-bottom:1px solid rgba(26,58,92,.3)}
+.cr-f:last-child{border-bottom:none}
+.cr-l{font-size:9px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.8px;white-space:nowrap}
+.cr-v{font-size:12px;color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cr-url{color:var(--p);font-weight:600}
+.cr-pw{font-family:'Cascadia Code',Consolas,monospace;color:var(--tx);font-size:13px;letter-spacing:1px}
+.cr-ind-warn{color:var(--a);font-weight:600}
+.cr-ind-info{color:#60a5fa}
 .foot{text-align:center;color:var(--mut);font-size:11px;padding:22px;border-top:1px solid var(--bd);margin-top:8px;line-height:1.8}
 .foot a{color:var(--p);text-decoration:none}
 .foot a:hover{text-decoration:underline}
