@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SecurityAudit — Scanning...</title>
+<style>
+:root{--bg:#050b14;--sf:#0a1628;--sf2:#0f2040;--bd:#1a3a5c;--p:#00d4ff;--g:#00ff88;--r:#ff4444;--a:#ffaa00;--tx:#cde0f0;--tx2:#6b9cc4;--mut:#4a7aa0}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);background-size:48px 48px;animation:gridMove 25s linear infinite;pointer-events:none;z-index:0}
+@keyframes gridMove{to{background-position:0 48px}}
+.topbar{position:fixed;top:0;left:0;right:0;height:46px;background:rgba(5,11,20,.96);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 22px;gap:10px;z-index:200;backdrop-filter:blur(12px)}
+.brand{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--p)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--g);animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1;box-shadow:0 0 6px var(--g)}50%{opacity:.3;box-shadow:none}}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.tophost{font-size:11px;color:var(--mut);font-family:'Cascadia Code',Consolas,monospace}
+.ioc-pill{padding:3px 11px;border-radius:4px;font-size:11px;font-weight:700;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--p);transition:all .4s}
+.ioc-pill.hot{background:rgba(255,68,68,.12);border-color:rgba(255,68,68,.35);color:#ff7a7a}
+.main{display:grid;grid-template-columns:300px 1fr;height:100vh;padding-top:46px}
+.panel-l{background:var(--sf);border-right:1px solid var(--bd);display:flex;flex-direction:column;position:relative;z-index:1}
+.panel-title{padding:16px 18px 10px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--bd)}
+.steps{flex:1;overflow-y:auto;padding:4px 0}
+.steps::-webkit-scrollbar{width:3px}
+.steps::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
+.step{display:flex;align-items:center;gap:10px;padding:9px 18px;position:relative;transition:background .2s}
+.step.active{background:rgba(0,212,255,.05);border-left:2px solid var(--p)}
+.step.done{opacity:.6}
+.step-ico{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;border:1.5px solid var(--bd);color:var(--mut);transition:all .3s}
+.step-ico.done{background:rgba(0,255,136,.08);border-color:var(--g);color:var(--g)}
+.step-ico.active{background:rgba(0,212,255,.12);border-color:var(--p);color:var(--p);animation:stepPulse 1.8s ease-in-out infinite}
+@keyframes stepPulse{0%,100%{box-shadow:0 0 0 0 rgba(0,212,255,.4)}60%{box-shadow:0 0 0 6px rgba(0,212,255,0)}}
+.step-lbl{font-size:12px;flex:1;color:var(--mut)}
+.step-lbl.active{color:var(--tx);font-weight:500}
+.step-lbl.done{color:#2a4a6a}
+.status-bar{padding:14px 18px;border-top:1px solid var(--bd)}
+.prog-row{display:flex;justify-content:space-between;font-size:10px;color:var(--mut);margin-bottom:7px}
+.prog-pct{color:var(--p);font-weight:700}
+.pbar{height:3px;background:rgba(255,255,255,.05);border-radius:99px;overflow:visible;position:relative}
+.pbar-fill{height:100%;background:linear-gradient(90deg,var(--p),var(--g));border-radius:99px;transition:width .9s cubic-bezier(.4,0,.2,1);position:relative;box-shadow:0 0 10px rgba(0,212,255,.4)}
+.pbar-fill::after{content:'';position:absolute;right:-4px;top:-4px;width:11px;height:11px;border-radius:50%;background:var(--p);box-shadow:0 0 8px 3px rgba(0,212,255,.5);transition:opacity .3s}
+.credits-panel{padding:10px 18px;border-top:1px solid var(--bd);font-size:10px;color:var(--mut);text-align:center}
+.credits-panel a{color:var(--p);text-decoration:none}
+.credits-panel a:hover{text-decoration:underline}
+.panel-r{display:flex;flex-direction:column;background:var(--bg);position:relative;z-index:1}
+.scan-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:32px}
+.rings{position:relative;width:180px;height:180px}
+.ring{position:absolute;inset:0;border-radius:50%;border:1px solid;animation:ripple 3s ease-out infinite}
+.ring:nth-child(1){border-color:rgba(0,212,255,.9);animation-delay:0s}
+.ring:nth-child(2){border-color:rgba(0,212,255,.4);animation-delay:.6s}
+.ring:nth-child(3){border-color:rgba(0,212,255,.15);animation-delay:1.2s}
+@keyframes ripple{0%{transform:scale(.45);opacity:1}100%{transform:scale(2.6);opacity:0}}
+.sweep{position:absolute;inset:16px;border-radius:50%;background:conic-gradient(transparent 340deg,rgba(0,212,255,.18) 360deg);animation:sweep 2.8s linear infinite}
+@keyframes sweep{to{transform:rotate(360deg)}}
+.ring-core{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:56px;filter:drop-shadow(0 0 12px rgba(0,212,255,.4))}
+.scan-title{font-size:20px;font-weight:700;letter-spacing:-.3px;text-align:center}
+.scan-sub{font-size:12px;color:var(--tx2);text-align:center;min-height:18px}
+.stats{display:flex;border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
+.stat{flex:1;padding:14px 20px;text-align:center;border-right:1px solid var(--bd)}
+.stat:last-child{border-right:none}
+.stat-v{font-size:22px;font-weight:700;color:var(--p);font-family:'Cascadia Code',Consolas,monospace;letter-spacing:-1px}
+.stat-l{font-size:9px;color:var(--mut);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.term{height:120px;background:rgba(0,0,0,.5);border-top:1px solid var(--bd);font-family:'Cascadia Code',Consolas,monospace;font-size:11px;overflow:hidden;position:relative}
+.term::before{content:'';position:absolute;top:0;left:0;right:0;height:28px;background:linear-gradient(to bottom,rgba(0,0,0,.6),transparent);z-index:2;pointer-events:none}
+.term-inner{padding:10px 14px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
+.tl{animation:fadeUp .25s ease;color:var(--mut)}
+.tl.c{color:var(--p)}
+.tl.g{color:var(--g)}
+.tl.r{color:var(--r)}
+.tl.a{color:var(--a)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.done-overlay{position:fixed;inset:0;background:rgba(5,11,20,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .5s ease;z-index:500}
+.done-overlay.show{opacity:1;pointer-events:all}
+.done-emoji{font-size:64px;animation:popIn .4s cubic-bezier(.175,.885,.32,1.275)}
+@keyframes popIn{0%{transform:scale(.2);opacity:0}100%{transform:scale(1);opacity:1}}
+.done-title{font-size:22px;font-weight:700;color:var(--g);letter-spacing:-.3px}
+.done-sub{font-size:13px;color:var(--tx2)}
+.dots{display:flex;gap:6px;margin-top:6px}
+.dot2{width:8px;height:8px;border-radius:50%;background:var(--p);animation:bounce 1.2s ease-in-out infinite}
+.dot2:nth-child(2){animation-delay:.2s}
+.dot2:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1.1);opacity:1}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><div class="dot"></div>SecurityAudit<span style="font-size:9px;color:var(--mut);margin-left:2px">v3.0</span></div>
+  <div class="topbar-right">
+    <span class="tophost" id="tophost">–</span>
+    <div class="ioc-pill" id="ioc-pill">0 IOCs</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="panel-l">
+    <div class="panel-title">Etapas de análise</div>
+    <div class="steps" id="steps"></div>
+    <div class="status-bar">
+      <div class="prog-row"><span id="step-txt">Aguardando agente...</span><span class="prog-pct" id="pct">0%</span></div>
+      <div class="pbar"><div class="pbar-fill" id="pbar" style="width:2%"></div></div>
+    </div>
+    <div class="credits-panel">by <a href="https://github.com/ferpgshy" target="_blank">Fernando Garcia</a> &nbsp;·&nbsp; github.com/ferpgshy</div>
+  </div>
+
+  <div class="panel-r">
+    <div class="scan-center">
+      <div class="rings">
+        <div class="ring"></div><div class="ring"></div><div class="ring"></div>
+        <div class="sweep"></div>
+        <div class="ring-core">🛡️</div>
+      </div>
+      <div class="scan-title" id="scan-title">Analisando sistema...</div>
+      <div class="scan-sub" id="scan-sub">Iniciando análise de segurança</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-v" id="sv-ioc">0</div><div class="stat-l">IOCs detectados</div></div>
+      <div class="stat"><div class="stat-v" id="sv-step">–</div><div class="stat-l">Progresso</div></div>
+      <div class="stat"><div class="stat-v" id="sv-time">00:00</div><div class="stat-l">Tempo decorrido</div></div>
+    </div>
+    <div class="term"><div class="term-inner" id="term"></div></div>
+  </div>
+</div>
+
+<div class="done-overlay" id="done-overlay">
+  <div class="done-emoji">✅</div>
+  <div class="done-title">Análise concluída!</div>
+  <div class="done-sub" id="done-sub">Carregando relatório...</div>
+  <div class="dots"><div class="dot2"></div><div class="dot2"></div><div class="dot2"></div></div>
+</div>
+
+<script>
+var STEPS=[
+  'Sistema operacional e hardware',
+  'Conexões de rede ativas',
+  'Processos em execução',
+  'Persistência (registro e tarefas)',
+  'Contas de usuário',
+  'Credenciais e senhas salvas',
+  'Eventos de segurança (logs)',
+  'Arquivos suspeitos',
+  'Portas abertas e DNS'
+];
+var LOG={
+  1:['Lendo informações do SO...','Coletando dados de hardware (CPU, RAM, BIOS)...','Verificando uptime e último reboot...'],
+  2:['Capturando snapshot TCP...','Mapeando PIDs para processos...','Checando IPs externos vs whitelist...'],
+  3:['Enumerando processos em execução...','Verificando assinaturas digitais (cache)...','Detectando paths suspeitos...'],
+  4:['Lendo Run Keys do Registro...','Analisando Tarefas Agendadas...','Verificando serviços em paths incomuns...'],
+  5:['Enumerando usuários locais...','Verificando grupo Administradores...','Checando senhas que nunca expiram...'],
+  6:['Acessando Windows Credential Manager...','Consultando Windows Vault...','Detectando bancos de senhas de browsers...'],
+  7:['Consultando Security Log (4625, 4720, 4732)...','Analisando falhas de logon...','Verificando limpeza de logs (1102)...'],
+  8:['Escaneando Temp e Downloads...','Verificando arquivo HOSTS...','Checando scripts em ProgramData...'],
+  9:['Listando portas em escuta...','Coletando cache DNS...','Finalizando e gerando relatório...']
+};
+var redirected=false,logSeen={},startTs=Date.now(),timerRef=null;
+
+function pad(n){return n<10?'0'+n:n}
+function tick(){var e=Math.floor((Date.now()-startTs)/1e3);document.getElementById('sv-time').textContent=pad(Math.floor(e/60))+':'+pad(e%60)}
+
+function addLog(txt,cls){
+  var t=document.getElementById('term');
+  var d=document.createElement('div');
+  d.className='tl'+(cls?' '+cls:'');
+  d.textContent='❯ '+txt;
+  t.appendChild(d);
+  while(t.children.length>7)t.removeChild(t.firstChild);
+}
+
+function render(d){
+  var idx=d.stepIndex,done=d.done,total=STEPS.length,iocs=d.iocs||0;
+
+  // Steps
+  document.getElementById('steps').innerHTML=STEPS.map(function(s,i){
+    var st=done||i<idx-1?'done':i===idx-1?'active':'';
+    var ic=st==='done'?'✓':st==='active'?'◉':(i+1);
+    return '<div class="step '+st+'"><div class="step-ico '+st+'">'+ic+'</div><div class="step-lbl '+st+'">'+s+'</div></div>';
+  }).join('');
+
+  // Progress
+  var pct=done?100:Math.max(2,Math.round(idx/total*100));
+  document.getElementById('pbar').style.width=pct+'%';
+  document.getElementById('pct').textContent=pct+'%';
+  document.getElementById('step-txt').textContent=done?'Concluído':(d.stepName||'Aguardando...');
+
+  // Stats
+  document.getElementById('sv-ioc').textContent=iocs;
+  document.getElementById('sv-step').textContent=(done?total:Math.max(1,idx))+'/'+total;
+
+  // IOC pill
+  var pill=document.getElementById('ioc-pill');
+  pill.textContent=iocs+(iocs===1?' IOC':' IOCs');
+  pill.className='ioc-pill'+(iocs>0?' hot':'');
+
+  // Host
+  if(d.computerName)document.getElementById('tophost').textContent=d.computerName;
+
+  // Center text
+  document.getElementById('scan-title').textContent=done?'Análise concluída':(d.stepName||'Iniciando...');
+  document.getElementById('scan-sub').textContent=done
+    ?iocs+' indicador(es) · '+d.duration+'s'
+    :'Etapa '+Math.max(1,idx)+' de '+total;
+
+  // Terminal log
+  if(idx>0&&!done){
+    var msgs=LOG[idx]||[];
+    var key='s'+idx;
+    if(msgs.length&&!logSeen[key]){
+      logSeen[key]=1;
+      addLog(msgs[Math.floor(Math.random()*msgs.length)],'c');
+    }
+  }
+  var ikey='i'+iocs;
+  if(iocs>0&&!logSeen[ikey]){logSeen[ikey]=1;addLog('IOC detectado! Total: '+iocs,'r')}
+
+  // Done
+  if(done&&!redirected){
+    redirected=true;
+    if(timerRef)clearInterval(timerRef);
+    addLog('Análise concluída. '+iocs+' IOC(s) detectado(s).','g');
+    addLog('Relatório HTML gerado e pronto.','g');
+    document.getElementById('done-sub').textContent=iocs+' indicador(es) encontrado(s) · Abrindo relatório...';
+    document.getElementById('done-overlay').classList.add('show');
+    setTimeout(function(){location.href='/report'},2500);
+  }
+}
+
+timerRef=setInterval(tick,1e3);
+
+function poll(){
+  fetch('/api/status')
+    .then(function(r){return r.json()})
+    .then(function(d){render(d);if(!d.done)setTimeout(poll,800)})
+    .catch(function(){setTimeout(poll,1500)});
+}
+render({stepIndex:0,done:false,iocs:0,stepName:'',duration:'',computerName:'',startTime:'',totalSteps:9});
+addLog('Conectando ao agente de segurança...','c');
+poll();
+</script>
+</body>
+</html>
